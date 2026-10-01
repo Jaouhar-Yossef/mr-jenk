@@ -60,25 +60,11 @@ pipeline {
             steps {
                 dir('frontend') {
                     sh '''
-                echo "===== FRONTEND DIRECTORY ====="
-                pwd
-                ls -la
-
-                echo "===== LOCK FILE CHECK ====="
-                if [ -f package-lock.json ]; then
-                    echo "package-lock.json FOUND"
-                else
-                    echo "package-lock.json NOT FOUND"
-                    find .. -name "package-lock.json"
-                    exit 1
-                fi
-
-                echo "===== RUN FRONTEND TESTS ====="
                 docker run --rm \
                     -v "$PWD:/app" \
                     -w /app \
                     node:22 \
-                    sh -c "npm ci && npm test -- --run"
+                    sh -c "echo '=== FILE ==='; ls -l package-lock.json; echo '=== LOCKFILE VERSION ==='; node -e \\"const p=require('./package-lock.json'); console.log(p.lockfileVersion)\\"; echo '=== NPM CI ==='; npm ci && npm test -- --run"
             '''
                 }
             }
