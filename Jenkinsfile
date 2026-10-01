@@ -61,8 +61,8 @@ pipeline {
                 dir('frontend') {
                     sh '''
                 docker run --rm \
-                    -v "$PWD:/app" \
-                    -w /app \
+                    -v jenkins_home:/var/jenkins_home \
+                    -w "$PWD" \
                     node:22 \
                     sh -c "echo '=== FILE ==='; ls -l package-lock.json; echo '=== LOCKFILE VERSION ==='; node -e \\"const p=require('./package-lock.json'); console.log(p.lockfileVersion)\\"; echo '=== NPM CI ==='; npm ci && npm test -- --run"
             '''
