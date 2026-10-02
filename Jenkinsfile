@@ -60,25 +60,51 @@ pipeline {
             steps {
                 dir('frontend') {
                     sh '''
-                docker run --rm \
-                    -v jenkins_home:/var/jenkins_home \
-                    -w "$PWD" \
-                    node:22 \
-                    sh -c "echo '=== FILE ==='; ls -l package-lock.json; echo '=== LOCKFILE VERSION ==='; node -e \\"const p=require('./package-lock.json'); console.log(p.lockfileVersion)\\"; echo '=== NPM CI ==='; npm ci && npm test"
-            '''
+                        docker run --rm \
+                            -v jenkins_home:/var/jenkins_home \
+                            -w "$PWD" \
+                            node:22 \
+                            sh -c "echo '=== FILE ==='; ls -l package-lock.json; echo '=== LOCKFILE VERSION ==='; node -e \\"const p=require('./package-lock.json'); console.log(p.lockfileVersion)\\"; echo '=== NPM CI ==='; npm ci && npm test"
+                    '''
                 }
             }
         }
 
         stage('Docker Build') {
             steps {
-                sh 'docker compose -f compose.prod.yml build'
+                withCredentials([
+                    file(
+                        credentialsId: 'gateway-keystore',
+                        variable: 'KEYSTORE_FILE'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+
+                        install -D "$KEYSTORE_FILE" \
+                            api-gateway/src/main/resources/keystore.p12
+
+                        trap 'rm -f api-gateway/src/main/resources/keystore.p12' EXIT
+
+                        docker compose -f compose.prod.yml build
+                    '''
+                }
             }
         }
 
         stage('Deploy') {
             steps {
-                sh 'docker compose -f compose.prod.yml up -d'
+                withCredentials([
+                    string(
+                        credentialsId: 'gateway-keystore-password',
+                        variable: 'SSL_KEYSTORE_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+                        docker compose -f compose.prod.yml up -d
+                    '''
+                }
             }
         }
     }

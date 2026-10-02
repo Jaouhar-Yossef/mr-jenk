@@ -6,7 +6,6 @@ services:
     restart: unless-stopped
     ports:
       - "8761:8761"
-
     healthcheck:
       test:
         [
@@ -25,10 +24,8 @@ services:
     image: mongo:7
     container_name: mongodb
     restart: unless-stopped
-
     volumes:
       - mongodb_data:/data/db
-
     healthcheck:
       test:
         ["CMD", "mongosh", "--eval", "db.adminCommand('ping').ok", "--quiet"]
@@ -42,13 +39,10 @@ services:
       context: ./user-service
     container_name: user-service
     restart: unless-stopped
-
     environment:
-      MONGODB_URI: ${USER_MONGODB_URI}
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
-      JWT_SECRET: ${JWT_SECRET}
-
+      MONGODB_URI: ${USER_MONGODB_URI:?USER_MONGODB_URI is required}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:?EUREKA URL is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -60,12 +54,9 @@ services:
       context: ./product-service
     container_name: product-service
     restart: unless-stopped
-
     environment:
-      MONGODB_URI: ${PRODUCT_MONGODB_URI}
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
-
+      MONGODB_URI: ${PRODUCT_MONGODB_URI:?PRODUCT_MONGODB_URI is required}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:?EUREKA URL is required}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -77,13 +68,10 @@ services:
       context: ./media-service
     container_name: media-service
     restart: unless-stopped
-
     environment:
-      MONGODB_URI: ${MEDIA_MONGODB_URI}
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
-      CLOUDINARY_URL: ${CLOUDINARY_URL}
-
+      MONGODB_URI: ${MEDIA_MONGODB_URI:?MEDIA_MONGODB_URI is required}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:?EUREKA URL is required}
+      CLOUDINARY_URL: ${CLOUDINARY_URL:?CLOUDINARY_URL is required}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -95,21 +83,17 @@ services:
       context: ./api-gateway
     container_name: api-gateway
     restart: unless-stopped
-
     ports:
       - "8443:8443"
-
     environment:
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
-      JWT_SECRET: ${JWT_SECRET}
-      SSL_KEYSTORE_PATH: ${SSL_KEYSTORE_PATH}
-      SSL_KEYSTORE_PASSWORD: ${SSL_KEYSTORE_PASSWORD}
-      CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN}
-
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:?EUREKA URL is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      SSL_KEYSTORE_PATH: classpath:keystore.p12
+      SSL_KEYSTORE_PASSWORD: ${SSL_KEYSTORE_PASSWORD:?Keystore password is required}
+      CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:?CORS origin is required}
     depends_on:
       discovery-server:
         condition: service_healthy
-
     healthcheck:
       test:
         [
@@ -131,10 +115,8 @@ services:
       dockerfile: Dockerfile.prod
     container_name: frontend
     restart: unless-stopped
-
     ports:
       - "4200:80"
-
     depends_on:
       api-gateway:
         condition: service_healthy
