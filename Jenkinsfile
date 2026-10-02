@@ -73,38 +73,40 @@ pipeline {
         stage('Docker Build') {
             steps {
                 withCredentials([
-                    file(
-                        credentialsId: 'gateway-keystore',
-                        variable: 'KEYSTORE_FILE'
-                    )
-                ]) {
+            file(credentialsId: 'gateway-keystore', variable: 'KEYSTORE_FILE'),
+            file(credentialsId: 'production-env', variable: 'ENV_FILE')
+        ]) {
                     sh '''
-                        set +x
+                set +x
 
-                        install -D "$KEYSTORE_FILE" \
-                            api-gateway/src/main/resources/keystore.p12
+                install -D "$KEYSTORE_FILE" \
+                    api-gateway/src/main/resources/keystore.p12
 
-                        trap 'rm -f api-gateway/src/main/resources/keystore.p12' EXIT
+                trap 'rm -f api-gateway/src/main/resources/keystore.p12' EXIT
 
-                        docker compose -f compose.prod.yml build
-                    '''
-                }
+                docker compose \
+                    --env-file "$ENV_FILE" \
+                    -f compose.prod.yml \
+                    build
+            '''
+        }
             }
         }
 
         stage('Deploy') {
             steps {
                 withCredentials([
-                    string(
-                        credentialsId: 'gateway-keystore-password',
-                        variable: 'SSL_KEYSTORE_PASSWORD'
-                    )
-                ]) {
+            file(credentialsId: 'production-env', variable: 'ENV_FILE')
+        ]) {
                     sh '''
-                        set +x
-                        docker compose -f compose.prod.yml up -d
-                    '''
-                }
+                set +x
+
+                docker compose \
+                    --env-file "$ENV_FILE" \
+                    -f compose.prod.yml \
+                    up -d
+            '''
+        }
             }
         }
     }
