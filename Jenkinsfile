@@ -73,40 +73,45 @@ pipeline {
         stage('Docker Build') {
             steps {
                 withCredentials([
-            file(credentialsId: 'gateway-keystore', variable: 'KEYSTORE_FILE'),
-            file(credentialsId: 'production-env', variable: 'ENV_FILE')
-        ]) {
+                    file(credentialsId: 'gateway-keystore', variable: 'KEYSTORE_FILE'),
+                    file(credentialsId: 'production-env', variable: 'ENV_FILE')
+                ]) {
                     sh '''
-                set +x
+                        set +x
 
-                install -D "$KEYSTORE_FILE" \
-                    api-gateway/src/main/resources/keystore.p12
+                        test -f "$KEYSTORE_FILE"
+                        test -f "$ENV_FILE"
 
-                trap 'rm -f api-gateway/src/main/resources/keystore.p12' EXIT
+                        install -D "$KEYSTORE_FILE" \
+                            api-gateway/src/main/resources/keystore.p12
 
-                docker compose \
-                    --env-file "$ENV_FILE" \
-                    -f compose.prod.yml \
-                    build
-            '''
-        }
+                        trap 'rm -f api-gateway/src/main/resources/keystore.p12' EXIT
+
+                        docker compose \
+                            --env-file "$ENV_FILE" \
+                            -f compose.prod.yml \
+                            build
+                    '''
+                }
             }
         }
 
         stage('Deploy') {
             steps {
                 withCredentials([
-            file(credentialsId: 'production-env', variable: 'ENV_FILE')
-        ]) {
+                    file(credentialsId: 'production-env', variable: 'ENV_FILE')
+                ]) {
                     sh '''
-                set +x
+                        set +x
 
-                docker compose \
-                    --env-file "$ENV_FILE" \
-                    -f compose.prod.yml \
-                    up -d
-            '''
-        }
+                        test -f "$ENV_FILE"
+
+                        docker compose \
+                            --env-file "$ENV_FILE" \
+                            -f compose.prod.yml \
+                            up -d
+                    '''
+                }
             }
         }
     }
