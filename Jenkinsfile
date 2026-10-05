@@ -24,6 +24,7 @@ pipeline {
          * 2. BACKEND TESTS
          * ==========================================
          */
+
         stage('Backend Tests') {
             parallel {
                 stage('Discovery Server Tests') {
@@ -32,11 +33,11 @@ pipeline {
                             sh './mvnw clean test'
                         }
                     }
-
                     post {
                         always {
                             dir('discovery-server') {
-                                junit 'target/surefire-reports/*.xml'
+                                junit allowEmptyResults: true,
+                              testResults: 'target/surefire-reports/*.xml'
                             }
                         }
                     }
@@ -48,11 +49,11 @@ pipeline {
                             sh './mvnw clean test'
                         }
                     }
-
                     post {
                         always {
                             dir('api-gateway') {
-                                junit 'target/surefire-reports/*.xml'
+                                junit allowEmptyResults: true,
+                              testResults: 'target/surefire-reports/*.xml'
                             }
                         }
                     }
@@ -64,11 +65,11 @@ pipeline {
                             sh './mvnw clean test'
                         }
                     }
-
                     post {
                         always {
                             dir('user-service') {
-                                junit 'target/surefire-reports/*.xml'
+                                junit allowEmptyResults: true,
+                              testResults: 'target/surefire-reports/*.xml'
                             }
                         }
                     }
@@ -80,11 +81,11 @@ pipeline {
                             sh './mvnw clean test'
                         }
                     }
-
                     post {
                         always {
                             dir('product-service') {
-                                junit 'target/surefire-reports/*.xml'
+                                junit allowEmptyResults: true,
+                              testResults: 'target/surefire-reports/*.xml'
                             }
                         }
                     }
@@ -96,11 +97,11 @@ pipeline {
                             sh './mvnw clean test'
                         }
                     }
-
                     post {
                         always {
                             dir('media-service') {
-                                junit 'target/surefire-reports/*.xml'
+                                junit allowEmptyResults: true,
+                              testResults: 'target/surefire-reports/*.xml'
                             }
                         }
                     }
@@ -126,7 +127,8 @@ pipeline {
 
             post {
                 always {
-                    junit 'frontend/test-results.xml'
+                    junit allowEmptyResults: true,
+                  testResults: 'frontend/test-results.xml'
                 }
             }
         }
