@@ -70,7 +70,7 @@ describe('Login', () => {
   it('should mark the form as invalid when submitted empty', () => {
     component.onSubmit();
 
-    expect(component.loginForm.invalid).toBe(false);
+    expect(component.loginForm.invalid).toBe(true);
 
     expect(component.email.touched).toBe(true);
 
