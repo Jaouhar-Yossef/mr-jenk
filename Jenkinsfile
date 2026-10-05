@@ -236,41 +236,42 @@ pipeline {
                             ps
 
                         for i in $(seq 1 30); do
-
+                        
                             echo ""
                             echo "Health check attempt $i/30"
-
+                        
                             DISCOVERY_STATUS=$(docker inspect \
                                 --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' \
                                 discovery-server)
-
+                        
                             GATEWAY_STATUS=$(docker inspect \
                                 --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' \
                                 api-gateway)
-
+                        
                             MONGO_STATUS=$(docker inspect \
                                 --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' \
                                 mongodb)
-
+                        
                             echo "Discovery Server: $DISCOVERY_STATUS"
                             echo "API Gateway:      $GATEWAY_STATUS"
                             echo "MongoDB:          $MONGO_STATUS"
-
+                        
                             if [ "$DISCOVERY_STATUS" = "healthy" ] && \
                                [ "$GATEWAY_STATUS" = "healthy" ] && \
                                [ "$MONGO_STATUS" = "healthy" ]; then
-
+                        
                                 echo ""
                                 echo "=========================================="
                                 echo "All required services are healthy!"
                                 echo "Deployment successful."
                                 echo "=========================================="
-
-                                exit 0
+                        
+                                echo "INTENTIONAL FAILURE: Testing rollback..."
+                                exit 1
                             fi
-
+                        
                             sleep 5
-
+                        
                         done
 
                         echo ""
