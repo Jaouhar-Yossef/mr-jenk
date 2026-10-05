@@ -4,7 +4,6 @@ pipeline {
     environment {
         COMPOSE_PROJECT_NAME = 'mr-jenk'
         APP_VERSION = "${BUILD_NUMBER}"
-        DEPLOYED = 'false'
     }
 
     stages {
@@ -16,6 +15,15 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+
+                /*
+                 * Remove deployment marker from previous builds.
+                 * This prevents an old marker from triggering
+                 * a false rollback.
+                 */
+                sh '''
+                    rm -f .deployment-successful
+                '''
             }
         }
 
@@ -24,7 +32,6 @@ pipeline {
          * 2. BACKEND TESTS
          * ==========================================
          */
-
         stage('Backend Tests') {
             parallel {
                 stage('Discovery Server Tests') {
@@ -33,11 +40,12 @@ pipeline {
                             sh './mvnw clean test'
                         }
                     }
+
                     post {
                         always {
                             dir('discovery-server') {
                                 junit allowEmptyResults: true,
-                              testResults: 'target/surefire-reports/*.xml'
+                                      testResults: 'target/surefire-reports/*.xml'
                             }
                         }
                     }
@@ -49,11 +57,12 @@ pipeline {
                             sh './mvnw clean test'
                         }
                     }
+
                     post {
                         always {
                             dir('api-gateway') {
                                 junit allowEmptyResults: true,
-                              testResults: 'target/surefire-reports/*.xml'
+                                      testResults: 'target/surefire-reports/*.xml'
                             }
                         }
                     }
@@ -65,11 +74,12 @@ pipeline {
                             sh './mvnw clean test'
                         }
                     }
+
                     post {
                         always {
                             dir('user-service') {
                                 junit allowEmptyResults: true,
-                              testResults: 'target/surefire-reports/*.xml'
+                                      testResults: 'target/surefire-reports/*.xml'
                             }
                         }
                     }
@@ -81,11 +91,12 @@ pipeline {
                             sh './mvnw clean test'
                         }
                     }
+
                     post {
                         always {
                             dir('product-service') {
                                 junit allowEmptyResults: true,
-                              testResults: 'target/surefire-reports/*.xml'
+                                      testResults: 'target/surefire-reports/*.xml'
                             }
                         }
                     }
@@ -97,11 +108,12 @@ pipeline {
                             sh './mvnw clean test'
                         }
                     }
+
                     post {
                         always {
                             dir('media-service') {
                                 junit allowEmptyResults: true,
-                              testResults: 'target/surefire-reports/*.xml'
+                                      testResults: 'target/surefire-reports/*.xml'
                             }
                         }
                     }
@@ -110,23 +122,25 @@ pipeline {
         }
 
         /*
+         * ==========================================
          * 3. FRONTEND TESTS
+         * ==========================================
          */
         stage('Frontend Tests') {
             steps {
                 sh '''
-            docker run --rm \
-                -v jenkins_home:/var/jenkins_home \
-                -w /var/jenkins_home/workspace/mr-jenk-pipeline/frontend \
-                node:22 \
-                sh -c "npm ci && npm test -- --watch=false --reporters=junit --output-file=test-results.xml"
-        '''
+                    docker run --rm \
+                        -v jenkins_home:/var/jenkins_home \
+                        -w /var/jenkins_home/workspace/mr-jenk-pipeline/frontend \
+                        node:22 \
+                        sh -c "npm ci && npm test -- --watch=false --reporters=junit --output-file=test-results.xml"
+                '''
             }
 
             post {
                 always {
                     junit allowEmptyResults: true,
-                  testResults: 'frontend/test-results.xml'
+                          testResults: 'frontend/test-results.xml'
                 }
             }
         }
@@ -163,7 +177,10 @@ pipeline {
 
                         trap 'rm -f api-gateway/src/main/resources/keystore.p12' EXIT
 
-                        echo "Building Docker images..."
+                        echo "=========================================="
+                        echo "Building Docker images"
+                        echo "Version: $APP_VERSION"
+                        echo "=========================================="
 
                         docker compose \
                             --env-file "$ENV_FILE" \
@@ -192,24 +209,32 @@ pipeline {
 
                         test -f "$ENV_FILE"
 
-                        echo "Deploying application version $APP_VERSION..."
+                        echo "=========================================="
+                        echo "Deploying application"
+                        echo "Version: $APP_VERSION"
+                        echo "=========================================="
 
                         docker compose \
                             --env-file "$ENV_FILE" \
                             -f compose.prod.yml \
                             up -d
-                    '''
 
-                    script {
-                        env.DEPLOYED = 'true'
-                    }
+                        echo "Deployment completed successfully."
+
+                        /*
+                         * Create marker ONLY after deployment succeeds.
+                         */
+                        touch .deployment-successful
+
+                        echo "Deployment marker created."
+                    '''
                 }
             }
         }
 
         /*
          * ==========================================
-         * 6. NORMAL HEALTH CHECK
+         * 6. HEALTH CHECK
          * ==========================================
          */
         stage('Health Check') {
@@ -236,42 +261,41 @@ pipeline {
                             ps
 
                         for i in $(seq 1 30); do
-                        
+
                             echo ""
                             echo "Health check attempt $i/30"
-                        
+
                             DISCOVERY_STATUS=$(docker inspect \
                                 --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' \
                                 discovery-server)
-                        
+
                             GATEWAY_STATUS=$(docker inspect \
                                 --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' \
                                 api-gateway)
-                        
+
                             MONGO_STATUS=$(docker inspect \
                                 --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' \
                                 mongodb)
-                        
+
                             echo "Discovery Server: $DISCOVERY_STATUS"
                             echo "API Gateway:      $GATEWAY_STATUS"
                             echo "MongoDB:          $MONGO_STATUS"
-                        
+
                             if [ "$DISCOVERY_STATUS" = "healthy" ] && \
                                [ "$GATEWAY_STATUS" = "healthy" ] && \
                                [ "$MONGO_STATUS" = "healthy" ]; then
-                        
+
                                 echo ""
                                 echo "=========================================="
                                 echo "All required services are healthy!"
                                 echo "Deployment successful."
                                 echo "=========================================="
-                        
-                                echo "INTENTIONAL FAILURE: Testing rollback..."
-                                exit 1
+
+                                exit 0
                             fi
-                        
+
                             sleep 5
-                        
+
                         done
 
                         echo ""
@@ -337,7 +361,10 @@ pipeline {
          */
         failure {
             script {
-                if (env.DEPLOYED != 'true') {
+                /*
+                 * Check if deployment actually happened
+                 */
+                if (!fileExists('.deployment-successful')) {
                     echo '=========================================='
                     echo 'Pipeline failed before deployment.'
                     echo 'No rollback is required.'
@@ -352,7 +379,9 @@ pipeline {
                      * Read last stable version
                      */
                     def stableVersion = sh(
-                        script: 'cat /var/jenkins_home/last-stable-version 2>/dev/null || true',
+                        script: '''
+                            cat /var/jenkins_home/last-stable-version 2>/dev/null || true
+                        ''',
                         returnStdout: true
                     ).trim()
 
@@ -371,10 +400,13 @@ pipeline {
                     }
 
                     echo "Previous stable version: ${stableVersion}"
+                    echo "Current failed version: ${env.BUILD_NUMBER}"
                     echo "Rolling back to version ${stableVersion}..."
 
                     /*
-                     * Rollback deployment
+                     * ==========================================
+                     * ROLLBACK DEPLOYMENT
+                     * ==========================================
                      */
                     withCredentials([
                         file(
@@ -387,19 +419,24 @@ pipeline {
 
                             test -f "\$ENV_FILE"
 
-                            echo "Starting rollback..."
+                            echo "=========================================="
+                            echo "Starting rollback"
+                            echo "Rollback version: ${stableVersion}"
+                            echo "=========================================="
 
                             APP_VERSION=${stableVersion} docker compose \
                                 --env-file "\$ENV_FILE" \
                                 -f compose.prod.yml \
-                                up -d
+                                up -d --force-recreate
+
+                            echo "Rollback deployment completed."
                         """
                     }
 
-                    echo 'Rollback deployment completed.'
-
                     /*
-                     * Rollback health check
+                     * ==========================================
+                     * ROLLBACK HEALTH CHECK
+                     * ==========================================
                      */
                     echo '=========================================='
                     echo 'Checking rollback health...'
