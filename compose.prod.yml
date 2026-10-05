@@ -1,5 +1,6 @@
 services:
   discovery-server:
+    image: buy-01-discovery-server:${APP_VERSION}
     build:
       context: ./discovery-server
     container_name: discovery-server
@@ -35,6 +36,7 @@ services:
       start_period: 30s
 
   user-service:
+    image: buy-01-user-service:${APP_VERSION}
     build:
       context: ./user-service
     container_name: user-service
@@ -50,6 +52,7 @@ services:
         condition: service_healthy
 
   product-service:
+    image: buy-01-product-service:${APP_VERSION}
     build:
       context: ./product-service
     container_name: product-service
@@ -64,6 +67,7 @@ services:
         condition: service_healthy
 
   media-service:
+    image: buy-01-media-service:${APP_VERSION}
     build:
       context: ./media-service
     container_name: media-service
@@ -79,6 +83,7 @@ services:
         condition: service_healthy
 
   api-gateway:
+    image: buy-01-api-gateway:${APP_VERSION}
     build:
       context: ./api-gateway
     container_name: api-gateway
@@ -110,6 +115,7 @@ services:
       start_period: 30s
 
   frontend:
+    image: buy-01-frontend:${APP_VERSION}
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
