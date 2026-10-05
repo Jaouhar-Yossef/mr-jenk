@@ -114,15 +114,13 @@ pipeline {
          */
         stage('Frontend Tests') {
             steps {
-                dir('frontend') {
-                    sh '''
-                docker run --rm \
-                    -v "$PWD:/app" \
-                    -w /app \
-                    node:22 \
-                    sh -c "npm ci && npm test -- --watch=false --reporters=junit --output-file=test-results.xml"
-            '''
-                }
+                sh '''
+            docker run --rm \
+                -v jenkins_home:/var/jenkins_home \
+                -w /var/jenkins_home/workspace/mr-jenk-pipeline/frontend \
+                node:22 \
+                sh -c "npm ci && npm test -- --watch=false --reporters=junit --output-file=test-results.xml"
+        '''
             }
 
             post {
