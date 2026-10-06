@@ -1,5 +1,4 @@
 pipeline {
-
     agent any
 
     environment {
@@ -8,7 +7,6 @@ pipeline {
     }
 
     stages {
-
         /*
          * ==========================================
          * 1. CHECKOUT
@@ -37,7 +35,6 @@ pipeline {
          */
         stage('Backend Tests') {
             parallel {
-
                 stage('Discovery Server Tests') {
                     steps {
                         dir('discovery-server') {
@@ -166,7 +163,6 @@ pipeline {
                         variable: 'ENV_FILE'
                     )
                 ]) {
-
                     sh '''
                         set +x
 
@@ -201,59 +197,37 @@ pipeline {
          * 5. DEPLOY
          * ==========================================
          */
+
         stage('Deploy') {
             steps {
                 withCredentials([
-                    file(
-                        credentialsId: 'production-env',
-                        variable: 'ENV_FILE'
-                    )
-                ]) {
-
+            file(credentialsId: 'production-env', variable: 'ENV_FILE')
+        ]) {
                     sh '''
-                        set +x
+                set +x
 
-                        test -f "$ENV_FILE"
+                echo "=========================================="
+                echo "Deploying application"
+                echo "Version: $APP_VERSION"
+                echo "=========================================="
 
-                        echo "=========================================="
-                        echo "Deploying application"
-                        echo "Version: $APP_VERSION"
-                        echo "=========================================="
+                test -f "$ENV_FILE"
 
-                        /*
-                         * IMPORTANT:
-                         * Mark that deployment has started BEFORE
-                         * docker compose is executed.
-                         *
-                         * If docker compose fails during deployment,
-                         * the post-failure section can still perform
-                         * an automatic rollback.
-                         */
-                        touch .deployment-attempted
+                touch .deployment-attempted
+                echo "Deployment attempt marker created."
 
-                        echo "Deployment attempt marker created."
+                docker compose --env-file "$ENV_FILE" -f compose.prod.yml up -d
 
-                        docker compose \
-                            --env-file "$ENV_FILE" \
-                            -f compose.prod.yml \
-                            up -d
+                echo "Deployment command completed successfully."
 
-                        echo "Deployment command completed successfully."
+                touch .deployment-successful
+                echo "Deployment success marker created."
 
-                        /*
-                         * This marker means docker compose itself
-                         * completed successfully.
-                         *
-                         * Health Check is still required afterwards.
-                         */
-                        touch .deployment-successful
-
-                        echo "Deployment success marker created."
-
-                        pwd
-                        ls -la
-                    '''
-                }
+                echo "=========================================="
+                echo "Deployment completed"
+                echo "=========================================="
+            '''
+        }
             }
         }
 
@@ -270,7 +244,6 @@ pipeline {
                         variable: 'ENV_FILE'
                     )
                 ]) {
-
                     sh '''
                         set +x
 
@@ -380,7 +353,6 @@ pipeline {
      * ==========================================
      */
     post {
-
         /*
          * ==========================================
          * SUCCESS
@@ -400,7 +372,6 @@ pipeline {
          */
         failure {
             script {
-
                 /*
                  * Check whether deployment was attempted.
                  *
@@ -414,14 +385,11 @@ pipeline {
                  * Therefore no rollback is necessary.
                  */
                 if (!fileExists('.deployment-attempted')) {
-
                     echo '=========================================='
                     echo 'Pipeline failed before deployment.'
                     echo 'No rollback is required.'
                     echo '=========================================='
-
                 } else {
-
                     echo '=========================================='
                     echo 'Deployment or health check failed.'
                     echo 'Starting automatic rollback...'
@@ -447,7 +415,6 @@ pipeline {
                      */
 
                     if (!stableVersion) {
-
                         echo '=========================================='
                         echo 'No previous stable version found.'
                         echo 'Rollback cannot be performed.'
@@ -474,7 +441,6 @@ pipeline {
                             variable: 'ENV_FILE'
                         )
                     ]) {
-
                         sh """
                             set +x
 
@@ -511,7 +477,6 @@ pipeline {
                             variable: 'ENV_FILE'
                         )
                     ]) {
-
                         sh '''
                             set +x
 
