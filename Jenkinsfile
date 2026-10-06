@@ -218,15 +218,16 @@ pipeline {
                             --env-file "$ENV_FILE" \
                             -f compose.prod.yml \
                             up -d
-
+                        
                         echo "Deployment completed successfully."
-
-                        /*
-                         * Create marker ONLY after deployment succeeds.
-                         */
+                        
+                        pwd
+                        ls -la
+                        
                         touch .deployment-successful
-
+                        
                         echo "Deployment marker created."
+                        ls -la .deployment-successful
                     '''
                 }
             }
@@ -291,7 +292,7 @@ pipeline {
                                 echo "Deployment successful."
                                 echo "=========================================="
 
-                                exit 0
+                                exit 1
                             fi
 
                             sleep 5
