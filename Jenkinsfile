@@ -1,4 +1,5 @@
 pipeline {
+
     agent any
 
     environment {
@@ -7,6 +8,7 @@ pipeline {
     }
 
     stages {
+
         /*
          * ==========================================
          * 1. CHECKOUT
@@ -17,12 +19,13 @@ pipeline {
                 checkout scm
 
                 /*
-                 * Remove deployment marker from previous builds.
+                 * Remove deployment markers from previous builds.
                  * This prevents an old marker from triggering
                  * a false rollback.
                  */
                 sh '''
                     rm -f .deployment-successful
+                    rm -f .deployment-attempted
                 '''
             }
         }
@@ -34,6 +37,7 @@ pipeline {
          */
         stage('Backend Tests') {
             parallel {
+
                 stage('Discovery Server Tests') {
                     steps {
                         dir('discovery-server') {
@@ -162,6 +166,7 @@ pipeline {
                         variable: 'ENV_FILE'
                     )
                 ]) {
+
                     sh '''
                         set +x
 
@@ -204,6 +209,7 @@ pipeline {
                         variable: 'ENV_FILE'
                     )
                 ]) {
+
                     sh '''
                         set +x
 
@@ -214,20 +220,38 @@ pipeline {
                         echo "Version: $APP_VERSION"
                         echo "=========================================="
 
+                        /*
+                         * IMPORTANT:
+                         * Mark that deployment has started BEFORE
+                         * docker compose is executed.
+                         *
+                         * If docker compose fails during deployment,
+                         * the post-failure section can still perform
+                         * an automatic rollback.
+                         */
+                        touch .deployment-attempted
+
+                        echo "Deployment attempt marker created."
+
                         docker compose \
                             --env-file "$ENV_FILE" \
                             -f compose.prod.yml \
                             up -d
-                        
-                        echo "Deployment completed successfully."
-                        
+
+                        echo "Deployment command completed successfully."
+
+                        /*
+                         * This marker means docker compose itself
+                         * completed successfully.
+                         *
+                         * Health Check is still required afterwards.
+                         */
+                        touch .deployment-successful
+
+                        echo "Deployment success marker created."
+
                         pwd
                         ls -la
-                        
-                        touch .deployment-successful
-                        
-                        echo "Deployment marker created."
-                        ls -la .deployment-successful
                     '''
                 }
             }
@@ -246,6 +270,7 @@ pipeline {
                         variable: 'ENV_FILE'
                     )
                 ]) {
+
                     sh '''
                         set +x
 
@@ -289,8 +314,20 @@ pipeline {
                                 echo ""
                                 echo "=========================================="
                                 echo "All required services are healthy!"
-                                echo "Deployment successful."
                                 echo "=========================================="
+
+                                /*
+                                 * INTENTIONAL FAILURE
+                                 *
+                                 * This is currently exit 1 on purpose
+                                 * to test automatic rollback.
+                                 *
+                                 * After rollback testing is finished,
+                                 * change this to:
+                                 *
+                                 * exit 0
+                                 */
+                                echo "INTENTIONAL FAILURE: Testing automatic rollback..."
 
                                 exit 1
                             fi
@@ -343,6 +380,7 @@ pipeline {
      * ==========================================
      */
     post {
+
         /*
          * ==========================================
          * SUCCESS
@@ -362,23 +400,39 @@ pipeline {
          */
         failure {
             script {
+
                 /*
-                 * Check if deployment actually happened
+                 * Check whether deployment was attempted.
+                 *
+                 * If this file does not exist, the pipeline failed
+                 * before deployment:
+                 *
+                 * - Backend tests
+                 * - Frontend tests
+                 * - Docker build
+                 *
+                 * Therefore no rollback is necessary.
                  */
-                if (!fileExists('.deployment-successful')) {
+                if (!fileExists('.deployment-attempted')) {
+
                     echo '=========================================='
                     echo 'Pipeline failed before deployment.'
                     echo 'No rollback is required.'
                     echo '=========================================='
+
                 } else {
+
                     echo '=========================================='
                     echo 'Deployment or health check failed.'
                     echo 'Starting automatic rollback...'
                     echo '=========================================='
 
                     /*
-                     * Read last stable version
+                     * ==========================================
+                     * READ LAST STABLE VERSION
+                     * ==========================================
                      */
+
                     def stableVersion = sh(
                         script: '''
                             cat /var/jenkins_home/last-stable-version 2>/dev/null || true
@@ -387,9 +441,13 @@ pipeline {
                     ).trim()
 
                     /*
-                     * Check stable version
+                     * ==========================================
+                     * CHECK STABLE VERSION
+                     * ==========================================
                      */
+
                     if (!stableVersion) {
+
                         echo '=========================================='
                         echo 'No previous stable version found.'
                         echo 'Rollback cannot be performed.'
@@ -409,12 +467,14 @@ pipeline {
                      * ROLLBACK DEPLOYMENT
                      * ==========================================
                      */
+
                     withCredentials([
                         file(
                             credentialsId: 'production-env',
                             variable: 'ENV_FILE'
                         )
                     ]) {
+
                         sh """
                             set +x
 
@@ -439,6 +499,7 @@ pipeline {
                      * ROLLBACK HEALTH CHECK
                      * ==========================================
                      */
+
                     echo '=========================================='
                     echo 'Checking rollback health...'
                     echo "Rollback version: ${stableVersion}"
@@ -450,6 +511,7 @@ pipeline {
                             variable: 'ENV_FILE'
                         )
                     ]) {
+
                         sh '''
                             set +x
 
