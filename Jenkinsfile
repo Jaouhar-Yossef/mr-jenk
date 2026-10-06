@@ -1,4 +1,5 @@
 pipeline {
+
     agent any
 
     environment {
@@ -7,6 +8,7 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -20,6 +22,7 @@ pipeline {
 
         stage('Backend Tests') {
             parallel {
+
                 stage('Discovery Server Tests') {
                     steps {
                         dir('discovery-server') {
@@ -107,40 +110,19 @@ pipeline {
             }
         }
 
-        // ==========================================
-        // 3. FRONTEND TESTS
-        // ==========================================
         stage('Frontend Tests') {
             steps {
-                sh '''
-            echo "=== Jenkins workspace ==="
-            pwd
-
-            echo "=== Frontend files ==="
-            ls -la frontend
-
-            echo "=== package-lock check ==="
-            ls -la frontend/package-lock.json
-
-            docker run --rm \
-                -v /home/yojaouhar/snap/code/264/.local/share/containers/storage/volumes/jenkins_home/_data/workspace/mr-jenk/frontend:/app \
-                -w /app \
-                node:22 \
-                sh -c "node --version && npm --version && ls -la && npm ci && npm test -- --watch=false --reporters=junit --output-file=test-results.xml"
-        '''
+                sh './scripts/frontend-test.sh'
             }
 
             post {
                 always {
                     junit allowEmptyResults: true,
-                  testResults: 'frontend/test-results.xml'
+                          testResults: 'frontend/test-results.xml'
                 }
             }
         }
 
-        // ==========================================
-        // 4. DOCKER BUILD
-        // ==========================================
         stage('Docker Build') {
             steps {
                 withCredentials([
@@ -153,27 +135,11 @@ pipeline {
                         variable: 'ENV_FILE'
                     )
                 ]) {
-                    sh '''
-                        set +x
-
-                        test -f "$KEYSTORE_FILE"
-                        test -f "$ENV_FILE"
-
-                        install -D "$KEYSTORE_FILE" api-gateway/src/main/resources/keystore.p12
-
-                        trap 'rm -f api-gateway/src/main/resources/keystore.p12' EXIT
-
-                        echo "Building Docker images: $APP_VERSION"
-
-                        docker compose --env-file "$ENV_FILE" -f compose.prod.yml build
-                    '''
+                    sh './scripts/docker-build.sh'
                 }
             }
         }
 
-        // ==========================================
-        // 5. DEPLOY
-        // ==========================================
         stage('Deploy') {
             steps {
                 withCredentials([
@@ -182,28 +148,11 @@ pipeline {
                         variable: 'ENV_FILE'
                     )
                 ]) {
-                    sh '''
-                        set +x
-
-                        test -f "$ENV_FILE"
-
-                        echo "Deploying version $APP_VERSION"
-
-                        touch .deployment-attempted
-
-                        docker compose --env-file "$ENV_FILE" -f compose.prod.yml up -d
-
-                        touch .deployment-successful
-
-                        echo "Deployment completed: $APP_VERSION"
-                    '''
+                    sh './scripts/deploy.sh'
                 }
             }
         }
 
-        // ==========================================
-        // 6. HEALTH CHECK
-        // ==========================================
         stage('Health Check') {
             steps {
                 withCredentials([
@@ -212,168 +161,56 @@ pipeline {
                         variable: 'ENV_FILE'
                     )
                 ]) {
-                    sh '''
-                        set +x
-
-                        test -f "$ENV_FILE"
-
-                        echo "Checking application health..."
-
-                        for i in $(seq 1 30); do
-
-                            DISCOVERY_STATUS=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' discovery-server)
-
-                            GATEWAY_STATUS=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' api-gateway)
-
-                            MONGO_STATUS=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' mongodb)
-
-                            if [ "$DISCOVERY_STATUS" = "healthy" ] && [ "$GATEWAY_STATUS" = "healthy" ] && [ "$MONGO_STATUS" = "healthy" ]; then
-
-                                echo "Application health check passed."
-
-                                exit 0
-                            fi
-
-                            echo "Health check $i/30: Discovery=$DISCOVERY_STATUS Gateway=$GATEWAY_STATUS MongoDB=$MONGO_STATUS"
-
-                            sleep 5
-                        done
-
-                        echo "Application health check failed."
-
-                        docker compose --env-file "$ENV_FILE" -f compose.prod.yml ps
-
-                        exit 1
-                    '''
+                    sh './scripts/health-check.sh'
                 }
             }
         }
 
-        // ==========================================
-        // 7. SAVE STABLE VERSION
-        // ==========================================
         stage('Save Stable Version') {
             steps {
                 sh '''
                     echo "$BUILD_NUMBER" > /var/jenkins_home/last-stable-version
-
                     echo "Stable version: $BUILD_NUMBER"
                 '''
             }
         }
     }
 
-    // ==========================================
-    // POST ACTIONS
-    // ==========================================
     post {
-        // ==========================================
-        // SUCCESS
-        // ==========================================
+
         success {
             echo 'CI/CD pipeline completed successfully.'
             echo "Stable version: ${env.BUILD_NUMBER}"
         }
 
-        // ==========================================
-        // FAILURE + AUTOMATIC ROLLBACK
-        // ==========================================
         failure {
             script {
+
                 if (!fileExists('.deployment-attempted')) {
+
                     echo 'Pipeline failed before deployment.'
                     echo 'No rollback required.'
+
                 } else {
+
                     echo 'Deployment failed.'
                     echo 'Starting automatic rollback...'
 
-                    def stableVersion = sh(
-                        script: '''
-                            cat /var/jenkins_home/last-stable-version 2>/dev/null || true
-                        ''',
-                        returnStdout: true
-                    ).trim()
-
-                    if (!stableVersion) {
-                        echo 'No stable version available.'
-
-                        error('Rollback cannot be performed.')
-                    }
-
-                    echo "Rolling back from ${env.BUILD_NUMBER} to ${stableVersion}."
-
-                    // ==========================================
-                    // ROLLBACK DEPLOYMENT
-                    // ==========================================
                     withCredentials([
                         file(
                             credentialsId: 'production-env',
                             variable: 'ENV_FILE'
                         )
                     ]) {
-                        sh """
-                            set +x
-
-                            test -f "\$ENV_FILE"
-
-                            APP_VERSION=${stableVersion} docker compose --env-file "\$ENV_FILE" -f compose.prod.yml up -d --force-recreate
-
-                            echo "Rollback deployment completed."
-                        """
+                        sh './scripts/rollback.sh'
+                        sh './scripts/rollback-health-check.sh'
                     }
 
-                    // ==========================================
-                    // ROLLBACK HEALTH CHECK
-                    // ==========================================
-                    withCredentials([
-                        file(
-                            credentialsId: 'production-env',
-                            variable: 'ENV_FILE'
-                        )
-                    ]) {
-                        sh '''
-                            set +x
-
-                            test -f "$ENV_FILE"
-
-                            echo "Checking rollback health..."
-
-                            for i in $(seq 1 30); do
-
-                                DISCOVERY_STATUS=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' discovery-server)
-
-                                GATEWAY_STATUS=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' api-gateway)
-
-                                MONGO_STATUS=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' mongodb)
-
-                                if [ "$DISCOVERY_STATUS" = "healthy" ] && [ "$GATEWAY_STATUS" = "healthy" ] && [ "$MONGO_STATUS" = "healthy" ]; then
-
-                                    echo "Rollback health check passed."
-
-                                    exit 0
-                                fi
-
-                                echo "Rollback health check $i/30: Discovery=$DISCOVERY_STATUS Gateway=$GATEWAY_STATUS MongoDB=$MONGO_STATUS"
-
-                                sleep 5
-                            done
-
-                            echo "Rollback health check failed."
-
-                            docker compose --env-file "$ENV_FILE" -f compose.prod.yml ps
-
-                            exit 1
-                        '''
-                    }
-
-                    echo "Rollback completed successfully: ${stableVersion}"
+                    echo 'Rollback completed successfully.'
                 }
             }
         }
 
-        // ==========================================
-        // ALWAYS
-        // ==========================================
         always {
             echo 'Pipeline finished.'
         }
