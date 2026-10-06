@@ -7,9 +7,6 @@ pipeline {
     }
 
     stages {
-        // ==========================================
-        // 1. CHECKOUT
-        // ==========================================
         stage('Checkout') {
             steps {
                 checkout scm
@@ -21,9 +18,6 @@ pipeline {
             }
         }
 
-        // ==========================================
-        // 2. BACKEND TESTS
-        // ==========================================
         stage('Backend Tests') {
             parallel {
                 stage('Discovery Server Tests') {
@@ -119,18 +113,28 @@ pipeline {
         stage('Frontend Tests') {
             steps {
                 sh '''
-                    docker run --rm \
-                        -v jenkins_home:/var/jenkins_home \
-                        -w /var/jenkins_home/workspace/mr-jenk-pipeline/frontend \
-                        node:22 \
-                        sh -c "npm ci && npm test -- --watch=false --reporters=junit --output-file=test-results.xml"
-                '''
+            echo "=== Jenkins workspace ==="
+            pwd
+
+            echo "=== Frontend files ==="
+            ls -la frontend
+
+            echo "=== package-lock check ==="
+            ls -la frontend/package-lock.json
+
+            echo "=== Node container ==="
+            docker run --rm \
+                -v "$PWD/frontend:/app" \
+                -w /app \
+                node:22 \
+                sh -c "node --version && npm --version && ls -la && npm ci && npm test -- --watch=false --reporters=junit --output-file=test-results.xml"
+        '''
             }
 
             post {
                 always {
                     junit allowEmptyResults: true,
-                          testResults: 'frontend/test-results.xml'
+                  testResults: 'frontend/test-results.xml'
                 }
             }
         }
