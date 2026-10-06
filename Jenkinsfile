@@ -122,9 +122,8 @@ pipeline {
             echo "=== package-lock check ==="
             ls -la frontend/package-lock.json
 
-            echo "=== Node container ==="
             docker run --rm \
-                -v "$PWD/frontend:/app" \
+                -v /home/yojaouhar/snap/code/264/.local/share/containers/storage/volumes/jenkins_home/_data/workspace/mr-jenk/frontend:/app \
                 -w /app \
                 node:22 \
                 sh -c "node --version && npm --version && ls -la && npm ci && npm test -- --watch=false --reporters=junit --output-file=test-results.xml"
